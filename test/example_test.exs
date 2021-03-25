@@ -27,9 +27,33 @@ defmodule ReserveSeat do
   def new(args), do: struct!(__MODULE__, args)
 end
 
+defmodule Screening do
+  @enforce_keys [:id]
+  defstruct [:id, :seats]
+
+  def new() do
+    %__MODULE__{id: UUID.uuid4(), seats: MapSet.new()}
+  end
+
+  def reserve_seats(screening, seats) do
+    # ....
+  end
+end
+
+defmodule Screenings do
+  def get_the_only_one() do
+    Screening.new()
+  end
+end
+
 defmodule ReservationHandler do
-  def handle(%ReserveSeat{} = _cmd) do
-    :ok
+  def handle(%ReserveSeat{seats: seats}) do
+    screening = Screenings.get_the_only_one()
+
+    case Screening.reserve_seats(screening, seats) do
+      {:ok, screening} -> Screenings.save(screening)
+      error -> error
+    end
   end
 end
 
