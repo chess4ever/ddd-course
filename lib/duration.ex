@@ -9,9 +9,8 @@ defmodule Duration do
   defstruct [:hours, :minutes]
 
   @spec new(map) :: t
-  def new(%{hours: _hours, minutes: _minutes} = args) do
-    struct!(__MODULE__, args)
-  end
+  def new(%{hours: nil, minutes: nil}), do: raise("Nil arguments")
+  def new(args), do: struct!(__MODULE__, args)
 
   @spec equals(t, t) :: bool
   def equals(%__MODULE__{} = a, %__MODULE__{} = b) do
