@@ -37,6 +37,11 @@ defmodule Screening do
 
   def reserve_seats(screening, seats) do
     # ....
+    if Enum.any?(seats, &MapSet.member?(&1, screening.seats)) do
+      # raise error
+    else
+      # add seats to screening
+    end
   end
 end
 
