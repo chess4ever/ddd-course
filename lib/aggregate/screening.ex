@@ -4,7 +4,7 @@ defmodule Screening do
 
   def new(events) do
     init_state = %__MODULE__{
-      id: Enum.random(0..1_000_000),
+      id: UUID.uuid4(),
       seats: []
     }
 
