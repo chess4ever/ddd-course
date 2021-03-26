@@ -5,7 +5,7 @@ defmodule Screening do
   def new(events) do
     init_state = %__MODULE__{
       id: UUID.uuid4(),
-      seats: []
+      seats: MapSet.new()
     }
 
     events
@@ -13,16 +13,22 @@ defmodule Screening do
   end
 
   def execute(
-        %ReserveSeats{customer: customer, seats: seats},
-        %__MODULE__{} = _a
+        %ReserveSeats{customer: customer, seats: command_seats},
+        %__MODULE__{seats: seats} = _a
       ) do
-    {:ok, SeatsReserved.new(%{customer: customer, seats: seats})}
+    case MapSet.intersection(seats, MapSet.new(command_seats)) |> MapSet.size() do
+      0 ->
+        {:ok, SeatsReserved.new(%{customer: customer, seats: command_seats})}
+
+      _ ->
+        :error
+    end
   end
 
   def apply_event(
         %SeatsReserved{seats: event_seats},
         %__MODULE__{seats: seats} = screening
       ) do
-    %__MODULE__{screening | seats: [event_seats | seats]}
+    %__MODULE__{screening | seats: MapSet.union(seats, MapSet.new(event_seats))}
   end
 end

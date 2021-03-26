@@ -5,7 +5,13 @@ defmodule Movie.EventStore do
     do: GenServer.start_link(__MODULE__, init_state, name: __MODULE__)
 
   def get(), do: GenServer.call(__MODULE__, :get)
-  def put(e), do: GenServer.call(__MODULE__, {:put, e})
+
+  def _store(%SeatsReserved{} = e), do: store({:ok, e})
+
+  def store({:ok, e}), do: GenServer.call(__MODULE__, {:put, e})
+  def store(:error), do: :error
+
+  def reset(), do: GenServer.cast(__MODULE__, :reset)
 
   @impl true
   def init(stack \\ []) do
@@ -19,6 +25,11 @@ defmodule Movie.EventStore do
 
   @impl true
   def handle_call({:put, event}, _from, events) do
-    {:reply, :ok, [event | events]}
+    {:reply, {:ok, event}, [event | events]}
+  end
+
+  @impl true
+  def handle_cast(:reset, _) do
+    {:noreply, []}
   end
 end

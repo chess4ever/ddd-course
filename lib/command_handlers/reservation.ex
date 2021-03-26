@@ -4,12 +4,8 @@ defmodule ReservationHandler do
       Movie.EventStore.get()
       |> Screening.new()
 
-    case Screening.execute(cmd, screening) do
-      {:ok, e} ->
-        Movie.EventStore.put(e)
-
-      error ->
-        error
-    end
+    Screening.execute(cmd, screening)
+    |> Movie.EventStore.store()
+    |> Projector.Screening.project()
   end
 end
