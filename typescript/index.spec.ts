@@ -5,9 +5,12 @@
 // The user chooses seats, and gives the name of the person doing the reservation (name and surname).
 // The system gives back the total amount to pay and reservation expiration time.
 // After 12 minutes, the reservatrion should be cancelled
+import uuid from "uuid/v4";
 
 namespace Domain {
-  export type Seat = string;
+  export type Seat = `${1 | 2}${"a" | "b" | "c"}`;
+  export type Time = { minutes: number };
+
   export const Screening = (publish: Infrastructure.Publish) => {
     let reservedSeats = new Set();
 
@@ -31,7 +34,13 @@ namespace Domain {
             Events.SeatsAlreadyReserved(command.title, alreadyReservedSeats)
           );
         } else {
-          publish(Events.SeatsReserved(command.title, command.seats));
+          publish(
+            Events.SeatsReserved(
+              command.reservationId,
+              command.title,
+              command.seats
+            )
+          );
         }
       },
     };
@@ -67,10 +76,15 @@ namespace Events {
       allSeats,
       type: "ScreeningPlanned",
     } as const);
-  export const SeatsReserved = (title: string, seats: Domain.Seat[]) =>
+  export const SeatsReserved = (
+    reservationId: string,
+    title: string,
+    seats: Domain.Seat[]
+  ) =>
     ({
       seats,
       title,
+      reservationId,
       type: "SeatsReserved",
     } as const);
   export const SeatsAlreadyReserved = (
@@ -93,8 +107,18 @@ namespace Commands {
     ({
       seats,
       title,
+      reservationId: uuid(),
       type: "ReserveSeat",
     } as const);
+  export const StartReservationTimer = (time: Domain.Time) =>
+    ({
+      time,
+      type: "ReserveSeat",
+    } as const);
+
+  export type Command =
+    | ReturnType<typeof ReserveSeat>
+    | ReturnType<typeof StartReservationTimer>;
 }
 namespace Queries {
   export const AvailableSeats = (title: string) =>
@@ -102,6 +126,8 @@ namespace Queries {
       title,
       type: "AvailableSeats",
     } as const);
+
+  export type Query = ReturnType<typeof AvailableSeats>;
 }
 
 namespace Infrastructure {
@@ -151,7 +177,10 @@ namespace TestingFramework {
       then_result(expectedResult: any) {
         expect(generatedResponse).toEqual(expectedResult);
       },
-      when(command: any) {
+      then_expected_command(_command: Commands.Command) {
+        // TODO
+      },
+      when(command: Commands.Command) {
         const commandHandler = Infrastructure.CommandHandler(
           history,
           (event) => {
@@ -160,7 +189,10 @@ namespace TestingFramework {
         );
         commandHandler.handleCommand(command);
       },
-      when_query(query: any) {
+      when_event(event: Events.Event) {
+        // TODO
+      },
+      when_query(query: Queries.Query) {
         generatedResponse = Infrastructure.QueryHandler(history).handleQuery(
           query
         );
@@ -169,21 +201,30 @@ namespace TestingFramework {
   };
 }
 
-const allSeats = ["1a", "1b", "1c", "2a", "2b", "2c"];
-it("Reserve Seat successfull test", () => {
-  const { given, then, when } = TestingFramework.createTest();
-  given(Events.ScreeningPlanned("Movie 42", allSeats));
-  when(Commands.ReserveSeat("Movie 42", ["1b", "1c"]));
-  then(Events.SeatsReserved("Movie 42", ["1b", "1c"]));
-});
-it("Reserve Seat failed test", () => {
-  const { given, then, when } = TestingFramework.createTest();
-  given(
-    Events.ScreeningPlanned("Movie 42", allSeats),
-    Events.SeatsReserved("Movie 42", ["1a", "1b"])
-  );
-  when(Commands.ReserveSeat("Movie 42", ["1b", "1c"]));
-  then(Events.SeatsAlreadyReserved("Movie 42", ["1b"]));
+const allSeats = [
+  "1a" as const,
+  "1b" as const,
+  "1c" as const,
+  "2a" as const,
+  "2b" as const,
+  "2c" as const,
+];
+describe("Commands", () => {
+  it("Reserve Seat successfull test", () => {
+    const { given, then, when } = TestingFramework.createTest();
+    given(Events.ScreeningPlanned("Movie 42", allSeats));
+    when(Commands.ReserveSeat("Movie 42", ["1b", "1c"]));
+    then(Events.SeatsReserved(expect.any(String), "Movie 42", ["1b", "1c"]));
+  });
+  it("Reserve Seat failed test", () => {
+    const { given, then, when } = TestingFramework.createTest();
+    given(
+      Events.ScreeningPlanned("Movie 42", allSeats),
+      Events.SeatsReserved(uuid(), "Movie 42", ["1a", "1b"])
+    );
+    when(Commands.ReserveSeat("Movie 42", ["1b", "1c"]));
+    then(Events.SeatsAlreadyReserved("Movie 42", ["1b"]));
+  });
 });
 // it("Reserve Seat failed test because reserving seat that does not exist", () => {
 //   const { given, then, when } = TestingFramework.createTest();
@@ -192,24 +233,39 @@ it("Reserve Seat failed test", () => {
 //   then(Events.SeatsNotExisting("Movie 42", ["3b", "3c"]));
 // });
 
-it("Projection: Available seats", () => {
-  const { given, then_result, when_query } = TestingFramework.createTest();
-  given(Events.ScreeningPlanned("Movie 42", allSeats));
-  when_query(Queries.AvailableSeats("Movie 42"));
-  then_result({
-    availableSeats: allSeats,
-    title: "Movie 42",
+describe("Projection", () => {
+  it("Available seats", () => {
+    const { given, then_result, when_query } = TestingFramework.createTest();
+    given(Events.ScreeningPlanned("Movie 42", allSeats));
+    when_query(Queries.AvailableSeats("Movie 42"));
+    then_result({
+      availableSeats: allSeats,
+      title: "Movie 42",
+    });
+  });
+  it("Available seats after reservation", () => {
+    const { given, then_result, when_query } = TestingFramework.createTest();
+    given(
+      Events.ScreeningPlanned("Movie 42", allSeats),
+      Events.SeatsReserved(uuid(), "Movie 42", ["2a", "2b"])
+    );
+    when_query(Queries.AvailableSeats("Movie 42"));
+    then_result({
+      availableSeats: ["1a", "1b", "1c", "2c"],
+      title: "Movie 42",
+    });
   });
 });
-it("Projection: Available seats after reservation", () => {
-  const { given, then_result, when_query } = TestingFramework.createTest();
-  given(
-    Events.ScreeningPlanned("Movie 42", allSeats),
-    Events.SeatsReserved("Movie 42", ["2a", "2b"])
-  );
-  when_query(Queries.AvailableSeats("Movie 42"));
-  then_result({
-    availableSeats: ["1a", "1b", "1c", "2c"],
-    title: "Movie 42",
+
+describe("Policies", () => {
+  it("...", () => {
+    const {
+      given,
+      then_expected_command,
+      when_event,
+    } = TestingFramework.createTest();
+    given(Events.ScreeningPlanned("Movie 42", allSeats));
+    when_event(Events.SeatsReserved(uuid(), "Movie 42", ["2a", "2b"]));
+    then_expected_command(Commands.StartReservationTimer({ minutes: 10 }));
   });
 });
